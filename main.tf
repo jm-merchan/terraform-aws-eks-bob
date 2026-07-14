@@ -1,8 +1,3 @@
-# Resolve AWS partition and account ID at module level to avoid
-# unresolvable count expressions in the eks-managed-node-group submodule.
-data "aws_partition" "current" {}
-data "aws_caller_identity" "current" {}
-
 # VPC — created only when vpc_id is not provided
 module "vpc" {
   source  = "app.terraform.io/jose-merchan/vpc/aws"
@@ -62,7 +57,13 @@ module "eks" {
   endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
 
   # Secrets encryption with CMK (Security Hub EKS.3)
-  create_kms_key = var.kms_key_enabled
+  # Use encryption_config object (not create_kms_key) to avoid plan-time evaluation
+  # issues with the KMS submodule's conditional count expressions.
+  create_kms_key          = var.kms_key_enabled
+  enable_kms_key_rotation = true
+  encryption_config = var.kms_key_enabled ? {
+    resources = ["secrets"]
+  } : null
 
   # Control plane logging (Security Hub EKS.8)
   enabled_log_types                      = var.cluster_log_types
@@ -90,11 +91,6 @@ module "eks" {
       instance_types = var.node_instance_types
       capacity_type  = var.node_capacity_type
       disk_size      = var.node_disk_size
-
-      # Supplied explicitly so the submodule skips its own data source lookups
-      # (count = var.create && var.partition == "" ? 1 : 0) which cause plan errors.
-      partition  = data.aws_partition.current.partition
-      account_id = data.aws_caller_identity.current.account_id
 
       update_config = {
         max_unavailable = 1
