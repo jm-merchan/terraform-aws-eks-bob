@@ -1,3 +1,8 @@
+# Resolve AWS partition and account ID at module level to avoid
+# unresolvable count expressions in the eks-managed-node-group submodule.
+data "aws_partition" "current" {}
+data "aws_caller_identity" "current" {}
+
 # VPC — created only when vpc_id is not provided
 module "vpc" {
   source  = "app.terraform.io/jose-merchan/vpc/aws"
@@ -70,8 +75,8 @@ module "eks" {
   authentication_mode = var.authentication_mode
 
   # Managed node group — single mixed-workload group; K8s scheduling handles isolation
-  # partition and account_id are supplied to prevent the submodule from using
-  # data source count expressions that are unresolvable with mock providers in tests.
+  # partition and account_id are resolved at module level (data sources above) and passed
+  # explicitly to prevent the submodule from using count expressions on unknown values.
   eks_managed_node_groups = {
     default = {
       name = "${var.cluster_name}-ng"
@@ -85,6 +90,11 @@ module "eks" {
       instance_types = var.node_instance_types
       capacity_type  = var.node_capacity_type
       disk_size      = var.node_disk_size
+
+      # Supplied explicitly so the submodule skips its own data source lookups
+      # (count = var.create && var.partition == "" ? 1 : 0) which cause plan errors.
+      partition  = data.aws_partition.current.partition
+      account_id = data.aws_caller_identity.current.account_id
 
       update_config = {
         max_unavailable = 1
