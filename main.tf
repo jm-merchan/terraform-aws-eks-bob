@@ -5,9 +5,10 @@ module "eks_cluster" {
   version = "~> 0.0"
 
   # Mandatory tags
-  environment = var.environment
-  owner       = var.tags["Owner"] != null ? var.tags["Owner"] : "platform-team"
-  cost_center = var.tags["CostCenter"] != null ? var.tags["CostCenter"] : "default"
+  # eks-cluster/aws validates environment as dev/staging/prod — map sandbox→dev for internal use
+  environment = var.environment == "sandbox" ? "dev" : var.environment
+  owner       = lookup(var.tags, "Owner", "platform-team")
+  cost_center = lookup(var.tags, "CostCenter", "default")
   project     = var.cluster_name
 
   # Cluster
